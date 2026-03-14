@@ -119,7 +119,7 @@ select.form-input option{background:var(--card2);}
 <body>
 
 <div class="liff-init" id="liff-init">
-  <div style="font-size:52px;">🏢</div>
+  <div style="font-size:52px;">&#x1F3E2;</div>
   <div class="liff-spinner"></div>
   <div style="font-size:14px;color:var(--text2);" id="liff-init-text">กำลังเชื่อมต่อ...</div>
 </div>
@@ -392,14 +392,6 @@ document.addEventListener('DOMContentLoaded', function() {
       .then(function() {
         if (liffDone) return;
         if (!liff.isLoggedIn()) {
-          // ถ้าไม่ได้อยู่ใน LINE browser ให้ข้ามไปเลย ไม่ redirect
-          if (liff.getOS() === 'web') {
-            liffDone = true;
-            clearTimeout(liffTimeout);
-            document.getElementById('liff-init').style.display = 'none';
-            startApp();
-            return;
-          }
           liff.login();
           return Promise.reject('login');
         }
