@@ -224,17 +224,34 @@ select.form-input option{background:var(--card2);}
       <button class="btn btn-secondary" id="btn-reg-cancel">ยกเลิก</button>
     </div>
     <div id="reg-step2" style="display:none;">
-      <div class="face-wrap">
-        <div class="alert-card warning" style="width:100%;">
-          <div class="alert-icon">📸</div>
-          <div class="alert-title" style="color:var(--yellow);">ถ่ายรูปใบหน้า</div>
-          <div class="alert-desc">หันหน้าตรง มองกล้อง ให้ใบหน้าอยู่ในวงกลม</div>
-        </div>
-        <div class="camera-container">
-          <video id="reg2-video" autoplay playsinline muted></video>
-          <canvas id="reg2-canvas"></canvas>
-          <div class="face-frame" id="reg2-face-frame"></div>
-        </div>
+  <div class="face-wrap">
+    <div class="alert-card warning" style="width:100%;">
+      <div class="alert-icon">📸</div>
+      <div class="alert-title" style="color:var(--yellow);">ถ่ายรูปใบหน้า 3 มุม</div>
+      <div class="alert-desc" id="reg-angle-desc">มุมที่ 1: หันหน้าตรง มองกล้อง</div>
+    </div>
+
+    <!-- Step dots -->
+    <div style="display:flex;gap:12px;justify-content:center;">
+      <div id="reg-dot-1" style="width:36px;height:36px;border-radius:50%;background:var(--card2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--text2);">1</div>
+      <div id="reg-dot-2" style="width:36px;height:36px;border-radius:50%;background:var(--card2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--text2);">2</div>
+      <div id="reg-dot-3" style="width:36px;height:36px;border-radius:50%;background:var(--card2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--text2);">3</div>
+    </div>
+
+    <div class="camera-container">
+      <video id="reg2-video" autoplay playsinline muted></video>
+      <canvas id="reg2-canvas"></canvas>
+      <div class="face-frame" id="reg2-face-frame"></div>
+    </div>
+    <div class="face-status-text" id="reg2-status">กำลังเปิดกล้อง...</div>
+    <div class="face-sub-text" id="reg2-sub">ใบหน้าต้องชัดเจน มีแสงเพียงพอ</div>
+    <div style="display:flex;flex-direction:column;gap:10px;width:100%;">
+      <button class="btn btn-success"   id="btn-reg-capture"   disabled>📸 ถ่ายรูป</button>
+      <button class="btn btn-secondary" id="btn-reg-retry-cam" style="display:none;">🔄 ลองเปิดกล้องใหม่</button>
+      <button class="btn btn-secondary" id="btn-reg-back-step1">‹ กลับแก้ข้อมูล</button>
+    </div>
+  </div>
+</div>
         <div class="face-status-text" id="reg2-status">กำลังเปิดกล้อง...</div>
         <div class="face-sub-text">ใบหน้าต้องชัดเจน มีแสงเพียงพอ</div>
         <div style="display:flex;flex-direction:column;gap:10px;width:100%;">
@@ -554,9 +571,11 @@ function goToRegStep2() {
   if (!shift)        { showToast('กรุณาเลือกกะงาน', 'error'); return; }
   if (!modelsLoaded) { showToast('⏳ Face Recognition กำลังโหลด รอสักครู่', 'error'); return; }
 
-  document.getElementById('reg-step1').style.display         = 'none';
-  document.getElementById('reg-step2').style.display          = 'block';
+  document.getElementById('reg-step1').style.display = 'none';
+  document.getElementById('reg-step2').style.display = 'block';
   document.getElementById('btn-reg-retry-cam').style.display = 'none';
+  resetRegAngles();   // ← รีเซ็ต angles ทุกครั้ง
+  updateRegAngleUI();
   startReg2Camera();
 }
 
@@ -592,10 +611,53 @@ function startReg2Camera() {
     });
 }
 
+function // เก็บ descriptors 3 มุม
+var regDescriptors = [];
+var regAngle       = 0;
+var regAngles      = [
+  { label: 'มุมที่ 1: หันหน้าตรง มองกล้อง',          btn: '📸 ถ่ายรูปหน้าตรง' },
+  { label: 'มุมที่ 2: หันซ้ายเล็กน้อย แล้วถ่าย',     btn: '📸 ถ่ายรูปหันซ้าย' },
+  { label: 'มุมที่ 3: หันขวาเล็กน้อย แล้วถ่าย',      btn: '📸 ถ่ายรูปหันขวา' }
+];
+
+function resetRegAngles() {
+  regDescriptors = [];
+  regAngle       = 0;
+  updateRegAngleUI();
+}
+
+function updateRegAngleUI() {
+  var a = regAngles[regAngle] || regAngles[0];
+  document.getElementById('reg-angle-desc').textContent = a.label;
+  document.getElementById('btn-reg-capture').textContent = a.btn;
+
+  // อัปเดต dots
+  for (var i = 1; i <= 3; i++) {
+    var dot = document.getElementById('reg-dot-' + i);
+    if (i < regAngle + 1) {
+      dot.style.background = 'var(--green)';
+      dot.style.borderColor = 'var(--green)';
+      dot.style.color = '#000';
+      dot.textContent = '✓';
+    } else if (i === regAngle + 1) {
+      dot.style.background = 'var(--accent)';
+      dot.style.borderColor = 'var(--accent)';
+      dot.style.color = '#fff';
+      dot.textContent = i;
+    } else {
+      dot.style.background = 'var(--card2)';
+      dot.style.borderColor = 'var(--border)';
+      dot.style.color = 'var(--text2)';
+      dot.textContent = i;
+    }
+  }
+}
+
 function doRegCapture() {
   var video  = document.getElementById('reg2-video');
   var frame  = document.getElementById('reg2-face-frame');
   var status = document.getElementById('reg2-status');
+
   frame.className    = 'face-frame scanning';
   status.textContent = '🔍 กำลังตรวจจับใบหน้า...';
   document.getElementById('btn-reg-capture').disabled = true;
@@ -609,10 +671,26 @@ function doRegCapture() {
         document.getElementById('btn-reg-capture').disabled = false;
         return null;
       }
-      frame.className    = 'face-frame success';
-      status.textContent = '✅ ตรวจพบใบหน้า กำลังบันทึก...';
-      var descriptor = Array.from(det.descriptor);
+
+      // บันทึก descriptor มุมนี้
+      regDescriptors.push(Array.from(det.descriptor));
+      regAngle++;
+
+      frame.className = 'face-frame success';
+
+      if (regAngle < 3) {
+        // ยังไม่ครบ 3 มุม → ถ่ายต่อ
+        updateRegAngleUI();
+        status.textContent = '✅ มุมที่ ' + regAngle + ' สำเร็จ! ถ่ายต่อได้เลย';
+        document.getElementById('btn-reg-capture').disabled = false;
+        return null;
+      }
+
+      // ครบ 3 มุม → คำนวณ average descriptor
+      status.textContent = '✅ ครบ 3 มุม กำลังบันทึก...';
+      var avgDescriptor = averageDescriptors(regDescriptors);
       showLoading('กำลังบันทึกข้อมูล...');
+
       return fetch(API_URL, {
         method: 'POST', redirect: 'follow',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -627,7 +705,7 @@ function doRegCapture() {
           late_deduct    : 0,
           geo_alert      : 'false',
           radius_m       : 50,
-          face_descriptor: JSON.stringify(descriptor)
+          face_descriptor: JSON.stringify(avgDescriptor)
         })
       }).then(function(r){ return r.json(); });
     })
@@ -637,6 +715,7 @@ function doRegCapture() {
 
       if (res.already_exists) {
         stopAllCameras();
+        resetRegAngles();
         showToast('✅ พบข้อมูลเดิม กำลังพาไปเช็คอิน...', 'success');
         fetch(API_URL + '?action=getEmployeeByLineId&line_user_id=' + encodeURIComponent(lineUserId))
           .then(function(r){ return r.json(); })
@@ -651,17 +730,17 @@ function doRegCapture() {
       }
 
       if (res.error) {
-        var errMsg = res.error;
-        if (errMsg.indexOf('not defined') > -1)  errMsg = 'ข้อมูลไม่ครบถ้วน กรุณาลองใหม่';
-        if (errMsg.indexOf('access') > -1)       errMsg = 'ไม่มีสิทธิ์เข้าถึง';
-        status.textContent = '❌ ' + errMsg;
+        document.getElementById('reg2-status').textContent = '❌ ' + res.error;
         document.getElementById('btn-reg-capture').disabled = false;
+        resetRegAngles();
+        updateRegAngleUI();
         return;
       }
 
       stopAllCameras();
+      resetRegAngles();
       var empName = document.getElementById('reg-name').value.trim();
-      currentEmp = { emp_id: res.emp_id, name: empName, shift_id: document.getElementById('reg-shift').value, line_user_id: lineUserId };
+      currentEmp  = { emp_id: res.emp_id, name: empName, shift_id: document.getElementById('reg-shift').value, line_user_id: lineUserId };
       var wrap = document.getElementById('success-icon-wrap');
       wrap.className = 'success-icon-big reg'; wrap.textContent = '🎉';
       document.getElementById('success-title').textContent = 'ลงทะเบียนสำเร็จ!';
@@ -669,20 +748,33 @@ function doRegCapture() {
       document.getElementById('result-cards').innerHTML =
         '<div class="result-card"><span class="result-label">👤 ชื่อ</span><span class="result-value">' + empName + '</span></div>'
         + '<div class="result-card"><span class="result-label">🆔 รหัส</span><span class="result-value" style="font-size:12px;">' + (res.emp_id||'-') + '</span></div>'
-        + '<div class="result-card"><span class="result-label">💬 LINE</span><span class="result-value" style="color:var(--green);">✅ บันทึกแล้ว</span></div>'
-        + '<div class="result-card"><span class="result-label">👤 ใบหน้า</span><span class="result-value" style="color:var(--green);">✅ บันทึกแล้ว</span></div>';
+        + '<div class="result-card"><span class="result-label">📸 ใบหน้า</span><span class="result-value" style="color:var(--green);">✅ 3 มุม บันทึกแล้ว</span></div>'
+        + '<div class="result-card"><span class="result-label">💬 LINE</span><span class="result-value" style="color:var(--green);">✅ บันทึกแล้ว</span></div>';
       showScreen('screen-success');
       showToast('✅ ลงทะเบียนสำเร็จ!', 'success');
     })
     .catch(function(e) {
       hideLoading();
-      var msg = e.message || 'ไม่ทราบสาเหตุ';
-      if (msg.indexOf('not defined') > -1)  msg = 'ข้อมูลไม่ครบถ้วน กรุณาลองใหม่';
-      if (msg.indexOf('fetch') > -1)        msg = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้';
-      if (msg.indexOf('NetworkError') > -1) msg = 'ไม่มีสัญญาณอินเทอร์เน็ต';
-      status.textContent = '❌ ' + msg;
+      document.getElementById('reg2-status').textContent = '❌ ' + (e.message || 'เกิดข้อผิดพลาด');
       document.getElementById('btn-reg-capture').disabled = false;
+      resetRegAngles();
+      updateRegAngleUI();
     });
+}
+
+// คำนวณค่าเฉลี่ย descriptor จาก 3 มุม
+function averageDescriptors(descriptors) {
+  var len = descriptors[0].length;
+  var avg = new Array(len).fill(0);
+  for (var i = 0; i < descriptors.length; i++) {
+    for (var j = 0; j < len; j++) {
+      avg[j] += descriptors[i][j];
+    }
+  }
+  for (var j = 0; j < len; j++) {
+    avg[j] /= descriptors.length;
+  }
+  return avg;
 }
 
 // ==========================================
