@@ -114,14 +114,13 @@ select.form-input option{background:var(--card2);}
 .toast.success{border-color:var(--green);color:var(--green);}
 .toast.error{border-color:var(--red);color:var(--red);}
 ::-webkit-scrollbar{width:0;}
-
 /* ── Status Alert Dialog ── */
-.status-dialog-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:none;align-items:center;justify-content:center;z-index:2000;padding:24px;backdrop-filter:blur(4px);}
+.status-dialog-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);display:none;align-items:center;justify-content:center;z-index:2000;padding:24px;backdrop-filter:blur(4px);}
 .status-dialog-overlay.show{display:flex;}
 .status-dialog{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:28px 24px;width:100%;max-width:340px;text-align:center;box-shadow:var(--shadow);}
 .status-dialog-icon{font-size:52px;margin-bottom:12px;}
 .status-dialog-title{font-size:18px;font-weight:800;margin-bottom:8px;}
-.status-dialog-desc{font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:20px;}
+.status-dialog-desc{font-size:14px;color:var(--text2);line-height:1.7;margin-bottom:16px;white-space:pre-line;}
 .status-dialog-time{font-size:13px;background:var(--card2);border-radius:10px;padding:10px 14px;margin-bottom:20px;color:var(--text);}
 .status-dialog-time span{color:var(--accent);font-weight:700;}
 .status-dialog-btns{display:flex;flex-direction:column;gap:10px;}
@@ -356,8 +355,8 @@ select.form-input option{background:var(--card2);}
     <div class="status-dialog-desc"  id="status-dialog-desc"></div>
     <div class="status-dialog-time"  id="status-dialog-time" style="display:none;"></div>
     <div class="status-dialog-btns">
-      <button class="btn btn-primary"    id="status-dialog-action-btn">✅ ดำเนินการต่อ</button>
-      <button class="btn btn-secondary"  id="status-dialog-cancel-btn">ยกเลิก</button>
+      <button class="btn btn-primary"   id="status-dialog-action-btn">✅ ดำเนินการต่อ</button>
+      <button class="btn btn-secondary" id="status-dialog-cancel-btn">ยกเลิก</button>
     </div>
   </div>
 </div>
@@ -496,41 +495,33 @@ function bindEvents() {
     this.style.display = 'none';
     startReg2Camera();
   });
-  document.getElementById('btn-retry-face').addEventListener('click',    function(){
+  document.getElementById('btn-retry-face').addEventListener('click', function(){
     this.style.display = 'none';
     startVerifyCamera();
   });
 
-  // Status dialog buttons
+  // Dialog cancel
   document.getElementById('status-dialog-cancel-btn').addEventListener('click', function(){
     document.getElementById('status-dialog-overlay').classList.remove('show');
   });
-}
-
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
-  document.getElementById(id).classList.add('active');
-  window.scrollTo(0, 0);
 }
 
 // ==========================================
 // STATUS DIALOG
 // ==========================================
 function showStatusDialog(opts) {
-  // opts: { icon, title, desc, timeText, actionLabel, actionFn }
-  document.getElementById('status-dialog-icon').textContent   = opts.icon  || '⚠️';
-  document.getElementById('status-dialog-title').textContent  = opts.title || 'แจ้งเตือน';
-  document.getElementById('status-dialog-desc').textContent   = opts.desc  || '';
+  document.getElementById('status-dialog-icon').textContent  = opts.icon  || '⚠️';
+  document.getElementById('status-dialog-title').textContent = opts.title || 'แจ้งเตือน';
+  document.getElementById('status-dialog-desc').textContent  = opts.desc  || '';
   var timeEl = document.getElementById('status-dialog-time');
   if (opts.timeText) {
-    timeEl.innerHTML    = opts.timeText;
+    timeEl.innerHTML     = opts.timeText;
     timeEl.style.display = 'block';
   } else {
     timeEl.style.display = 'none';
   }
   var actionBtn = document.getElementById('status-dialog-action-btn');
   actionBtn.textContent = opts.actionLabel || 'ดำเนินการต่อ';
-  // replace listener
   var newBtn = actionBtn.cloneNode(true);
   actionBtn.parentNode.replaceChild(newBtn, actionBtn);
   newBtn.addEventListener('click', function(){
@@ -538,6 +529,12 @@ function showStatusDialog(opts) {
     if (opts.actionFn) opts.actionFn();
   });
   document.getElementById('status-dialog-overlay').classList.add('show');
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
 }
 
 // ==========================================
@@ -847,7 +844,7 @@ function startCheckin(mode) {
 
 function loadShiftAndGo() {
   showLoading('กำลังตรวจสอบสถานะการเข้างาน...');
-  // 1) โหลด shifts ก่อน
+
   fetch(API_URL + '?action=getShifts')
     .then(function(r){ return r.json(); })
     .then(function(shifts) {
@@ -855,70 +852,69 @@ function loadShiftAndGo() {
       for (var i = 0; i < shifts.length; i++) {
         if (shifts[i].shift_id === currentEmp.shift_id) { currentShift = shifts[i]; break; }
       }
-      // 2) ดึงสถานะวันนี้
+      // ดึงสถานะวันนี้จาก GAS
       return fetch(API_URL + '?action=getTodayStatus&emp_id=' + encodeURIComponent(currentEmp.emp_id));
     })
     .then(function(r){ return r.json(); })
     .then(function(status) {
       hideLoading();
-      checkStatusAndGo(status);
+      // ตรวจสอบ response ว่า valid
+      if (status && typeof status.checked_in !== 'undefined') {
+        checkStatusAndGo(status);
+      } else {
+        // API ไม่ตอบถูกต้อง → ให้ผ่านไปได้เลย
+        goToGPSScreen();
+      }
     })
     .catch(function() {
-      // ถ้า API ไม่รองรับ getTodayStatus ให้ผ่านไปได้เลย
       hideLoading();
+      // ถ้า API error → fallback ให้ผ่าน แล้วให้ server block ซ้ำเอง
       goToGPSScreen();
     });
 }
 
 function checkStatusAndGo(status) {
-  // status คาดว่าจะมี: { checked_in: true/false, checked_out: true/false, time_in: "08:30", time_out: "..." }
-  var isIn  = currentMode === 'in';
+  var isIn = currentMode === 'in';
 
-  // กรณีพยายาม check-in ทั้งที่ check-in ไปแล้ว (และยังไม่ได้ check-out)
-  if (isIn && status && status.checked_in && !status.checked_out) {
+  // --- เช็คอิน: ถ้า checked_in แล้ว และ ยังไม่ check_out ---
+  if (isIn && status.checked_in === true && status.checked_out !== true) {
     showStatusDialog({
       icon       : '🔒',
       title      : 'คุณเช็คอินแล้ววันนี้!',
-      desc       : 'คุณได้เช็คอินเข้างานไปแล้วในวันนี้\nกรุณาเช็คเอ้าท์ออกงานก่อน\nแล้วค่อยเช็คอินใหม่ครับ',
+      desc       : 'คุณได้เช็คอินเข้างานไปแล้วในวันนี้\nกรุณาเช็คเอ้าท์ออกงานก่อน\nแล้วค่อยเช็คอินใหม่ได้ครับ',
       timeText   : status.time_in ? '⏰ เวลาเช็คอิน: <span>' + status.time_in + ' น.</span>' : null,
       actionLabel: '📤 ไปเช็คเอ้าท์เลย',
-      actionFn   : function() {
-        currentMode = 'out';
-        goToGPSScreen();
-      }
+      actionFn   : function(){ currentMode = 'out'; goToGPSScreen(); }
     });
     return;
   }
 
-  // กรณีพยายาม check-out ทั้งที่ยังไม่ได้ check-in
-  if (!isIn && status && !status.checked_in) {
+  // --- เช็คเอ้าท์: ถ้ายังไม่ได้ check_in เลย ---
+  if (!isIn && status.checked_in !== true) {
     showStatusDialog({
       icon       : '⚠️',
       title      : 'ยังไม่ได้เช็คอิน!',
       desc       : 'คุณยังไม่ได้เช็คอินเข้างานในวันนี้\nกรุณาเช็คอินก่อนนะครับ',
       actionLabel: '📥 ไปเช็คอินเลย',
-      actionFn   : function() {
-        currentMode = 'in';
-        goToGPSScreen();
-      }
+      actionFn   : function(){ currentMode = 'in'; goToGPSScreen(); }
     });
     return;
   }
 
-  // กรณีเช็คเอ้าท์ไปแล้ว
-  if (!isIn && status && status.checked_out) {
+  // --- เช็คเอ้าท์: ถ้าเช็คเอ้าท์ไปแล้วแล้ว ---
+  if (!isIn && status.checked_out === true) {
     showStatusDialog({
       icon       : '✅',
       title      : 'เช็คเอ้าท์แล้ววันนี้!',
-      desc       : 'คุณได้เช็คเอ้าท์ออกงานไปแล้วในวันนี้\nหากมีปัญหาให้ติดต่อ HR ครับ',
+      desc       : 'คุณได้เช็คเอ้าท์ออกงานแล้วในวันนี้\nหากมีปัญหาให้ติดต่อ HR ครับ',
       timeText   : status.time_out ? '⏰ เวลาเช็คเอ้าท์: <span>' + status.time_out + ' น.</span>' : null,
       actionLabel: '🏠 กลับหน้าหลัก',
-      actionFn   : function() { showScreen('screen-home'); }
+      actionFn   : function(){ showScreen('screen-home'); }
     });
     return;
   }
 
-  // ปกติ — ไปต่อได้เลย
+  // ปกติ — ไปต่อ
   goToGPSScreen();
 }
 
@@ -1098,22 +1094,29 @@ function doCheckAction() {
     .then(function(data) {
       hideLoading();
       if (data.error) {
-        var errLower = (data.error || '').toLowerCase();
-        // ตรวจจับ error ซ้ำจาก server
-        if (isIn && (errLower.indexOf('already') >= 0 || errLower.indexOf('เช็คอิน') >= 0 || errLower.indexOf('checkin') >= 0)) {
+        var msg = data.error || '';
+        // ตรวจ error เช็คอินซ้ำจาก server (GAS return: "เช็คอินวันนี้แล้ว เวลา HH:MM:SS")
+        if (isIn && msg.indexOf('เช็คอินวันนี้แล้ว') >= 0) {
+          // ดึงเวลาจาก error message
+          var timeMatch = msg.match(/\d{1,2}:\d{2}/);
           showStatusDialog({
             icon       : '🔒',
             title      : 'เช็คอินซ้ำ!',
             desc       : 'คุณได้เช็คอินวันนี้ไปแล้ว\nกรุณาเช็คเอ้าท์ออกงานก่อนครับ',
-            timeText   : data.time_in ? '⏰ เวลาเช็คอิน: <span>' + data.time_in + ' น.</span>' : null,
+            timeText   : timeMatch ? '⏰ เวลาเช็คอิน: <span>' + timeMatch[0] + ' น.</span>' : null,
             actionLabel: '📤 ไปเช็คเอ้าท์เลย',
-            actionFn   : function() {
-              currentMode = 'out';
-              loadShiftAndGo();
-            }
+            actionFn   : function(){ currentMode = 'out'; loadShiftAndGo(); }
+          });
+        } else if (!isIn && msg.indexOf('ไม่พบการเช็คอิน') >= 0) {
+          showStatusDialog({
+            icon       : '⚠️',
+            title      : 'ยังไม่ได้เช็คอิน!',
+            desc       : 'ไม่พบการเช็คอินวันนี้\nกรุณาเช็คอินก่อนนะครับ',
+            actionLabel: '📥 ไปเช็คอินเลย',
+            actionFn   : function(){ currentMode = 'in'; loadShiftAndGo(); }
           });
         } else {
-          showToast('❌ ' + data.error, 'error');
+          showToast('❌ ' + msg, 'error');
         }
         return;
       }
