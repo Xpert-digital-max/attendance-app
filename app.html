@@ -124,6 +124,10 @@ select.form-input option{background:var(--card2);}
 .status-dialog-time{font-size:13px;background:var(--card2);border-radius:10px;padding:10px 14px;margin-bottom:20px;color:var(--text);}
 .status-dialog-time span{color:var(--accent);font-weight:700;}
 .status-dialog-btns{display:flex;flex-direction:column;gap:10px;}
+/* ── GPS Accuracy Warning ── */
+.accuracy-warn{background:rgba(255,215,64,0.12);border:1px solid rgba(255,215,64,0.4);border-radius:12px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px;margin-bottom:4px;}
+.accuracy-warn-icon{font-size:20px;flex-shrink:0;}
+.accuracy-warn-text{font-size:12px;color:var(--yellow);line-height:1.5;}
 </style>
 </head>
 <body>
@@ -284,6 +288,10 @@ select.form-input option{background:var(--card2);}
           <span class="status-label">📡 ความแม่นยำ GPS</span>
           <span class="status-val" id="g-accuracy">กำลังตรวจสอบ...</span>
         </div>
+        <div id="g-accuracy-warn" style="display:none;" class="accuracy-warn">
+          <span class="accuracy-warn-icon">⚠️</span>
+          <span class="accuracy-warn-text" id="g-accuracy-warn-text"></span>
+        </div>
         <div class="status-row">
           <span class="status-label">📏 ระยะห่างจากที่ทำงาน</span>
           <span class="status-val" id="g-distance">-</span>
@@ -385,7 +393,8 @@ var autoScanInterval = null;
 var lineUserId       = '';
 var lineUserName     = '';
 var lineUserPic      = '';
-var checkActionFired = false; // ป้องกัน doCheckAction ถูกเรียกซ้ำ (race condition)
+var checkActionFired = false;
+var gpsMaxAccuracy   = 100; // โหลดจาก Config: GPS_ACCURACY_MAX (เมตร)
 
 // ==========================================
 // INIT
@@ -428,7 +437,19 @@ function startApp() {
   startClock();
   bindEvents();
   loadFaceModels();
+  loadGpsConfig();
   if (lineUserId) checkAutoLogin();
+}
+
+function loadGpsConfig() {
+  fetch(API_URL + '?action=getConfig')
+    .then(function(r){ return r.json(); })
+    .then(function(cfg) {
+      if (cfg && cfg.GPS_ACCURACY_MAX) {
+        gpsMaxAccuracy = parseInt(cfg.GPS_ACCURACY_MAX) || 100;
+      }
+    })
+    .catch(function(){});
 }
 
 function showLineProfile() {
@@ -500,8 +521,6 @@ function bindEvents() {
     this.style.display = 'none';
     startVerifyCamera();
   });
-
-  // Dialog cancel
   document.getElementById('status-dialog-cancel-btn').addEventListener('click', function(){
     document.getElementById('status-dialog-overlay').classList.remove('show');
   });
@@ -521,12 +540,8 @@ function showStatusDialog(opts) {
   document.getElementById('status-dialog-title').textContent = opts.title || 'แจ้งเตือน';
   document.getElementById('status-dialog-desc').textContent  = opts.desc  || '';
   var timeEl = document.getElementById('status-dialog-time');
-  if (opts.timeText) {
-    timeEl.innerHTML     = opts.timeText;
-    timeEl.style.display = 'block';
-  } else {
-    timeEl.style.display = 'none';
-  }
+  if (opts.timeText) { timeEl.innerHTML = opts.timeText; timeEl.style.display = 'block'; }
+  else               { timeEl.style.display = 'none'; }
   var actionBtn = document.getElementById('status-dialog-action-btn');
   actionBtn.textContent = opts.actionLabel || 'ดำเนินการต่อ';
   var newBtn = actionBtn.cloneNode(true);
@@ -555,16 +570,10 @@ function loadShiftAndGo() {
     .then(function(r){ return r.json(); })
     .then(function(status) {
       hideLoading();
-      if (status && typeof status.checked_in !== 'undefined') {
-        checkStatusAndGo(status);
-      } else {
-        goToGPSScreen();
-      }
+      if (status && typeof status.checked_in !== 'undefined') { checkStatusAndGo(status); }
+      else { goToGPSScreen(); }
     })
-    .catch(function() {
-      hideLoading();
-      goToGPSScreen();
-    });
+    .catch(function(){ hideLoading(); goToGPSScreen(); });
 }
 
 function checkStatusAndGo(status) {
@@ -572,7 +581,9 @@ function checkStatusAndGo(status) {
   if (isIn && status.checked_in === true && status.checked_out !== true) {
     showStatusDialog({
       icon: '🔒', title: 'คุณเช็คอินแล้ววันนี้!',
-      desc: 'คุณได้เช็คอินเข้างานไปแล้วในวันนี้\nกรุณาเช็คเอ้าท์ออกงานก่อน\nแล้วค่อยเช็คอินใหม่ได้ครับ',
+      desc: 'คุณได้เช็คอินเข้างานไปแล้วในวันนี้
+กรุณาเช็คเอ้าท์ออกงานก่อน
+แล้วค่อยเช็คอินใหม่ได้ครับ',
       timeText: status.time_in ? '⏰ เวลาเช็คอิน: <span>' + status.time_in + ' น.</span>' : null,
       actionLabel: '📤 ไปเช็คเอ้าท์เลย',
       actionFn: function(){ currentMode = 'out'; goToGPSScreen(); }
@@ -582,7 +593,8 @@ function checkStatusAndGo(status) {
   if (!isIn && status.checked_in !== true) {
     showStatusDialog({
       icon: '⚠️', title: 'ยังไม่ได้เช็คอิน!',
-      desc: 'คุณยังไม่ได้เช็คอินเข้างานในวันนี้\nกรุณาเช็คอินก่อนนะครับ',
+      desc: 'คุณยังไม่ได้เช็คอินเข้างานในวันนี้
+กรุณาเช็คอินก่อนนะครับ',
       actionLabel: '📥 ไปเช็คอินเลย',
       actionFn: function(){ currentMode = 'in'; goToGPSScreen(); }
     });
@@ -591,7 +603,8 @@ function checkStatusAndGo(status) {
   if (!isIn && status.checked_out === true) {
     showStatusDialog({
       icon: '✅', title: 'เช็คเอ้าท์แล้ววันนี้!',
-      desc: 'คุณได้เช็คเอ้าท์ออกงานแล้วในวันนี้\nหากมีปัญหาให้ติดต่อ HR ครับ',
+      desc: 'คุณได้เช็คเอ้าท์ออกงานแล้วในวันนี้
+หากมีปัญหาให้ติดต่อ HR ครับ',
       timeText: status.time_out ? '⏰ เวลาเช็คเอ้าท์: <span>' + status.time_out + ' น.</span>' : null,
       actionLabel: '🏠 กลับหน้าหลัก',
       actionFn: function(){ showScreen('screen-home'); }
@@ -906,18 +919,7 @@ function startCheckin(mode) {
     });
 }
 
-function loadShiftAndGo() {
-  fetch(API_URL + '?action=getShifts')
-    .then(function(r){ return r.json(); })
-    .then(function(shifts) {
-      currentShift = null;
-      for (var i = 0; i < shifts.length; i++) {
-        if (shifts[i].shift_id === currentEmp.shift_id) { currentShift = shifts[i]; break; }
-      }
-      goToGPSScreen();
-    })
-    .catch(function(){ goToGPSScreen(); });
-}
+// loadShiftAndGo is defined above
 
 // ==========================================
 // GPS
@@ -940,19 +942,59 @@ function goToGPSScreen() {
 
 function startGPS() {
   gpsData = null;
-  document.getElementById('g-accuracy').textContent = '⏳ กำลังรับสัญญาณ...';
-  document.getElementById('g-distance').textContent = '-';
-  document.getElementById('g-coord').textContent    = '-';
+  document.getElementById('g-accuracy').textContent        = '⏳ กำลังรับสัญญาณ...';
+  document.getElementById('g-distance').textContent        = '-';
+  document.getElementById('g-coord').textContent           = '-';
   document.getElementById('gps-result-block').style.display = 'none';
-  document.getElementById('btn-gps-next').disabled = true;
+  document.getElementById('g-accuracy-warn').style.display = 'none';
+  document.getElementById('btn-gps-next').disabled         = true;
   if (!navigator.geolocation) { showGPSError('อุปกรณ์ไม่รองรับ GPS'); return; }
+
   navigator.geolocation.getCurrentPosition(
     function(pos) {
-      gpsData = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: Math.round(pos.coords.accuracy) };
+      var acc = Math.round(pos.coords.accuracy);
+      gpsData = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: acc };
+
+      // ── ตรวจสอบ accuracy: ถ้าเกิน threshold = ใช้ตำแหน่งโดยประมาณ ──
+      if (acc > gpsMaxAccuracy) {
+        document.getElementById('g-accuracy').innerHTML =
+          '<span style="color:var(--red);">±' + acc + ' เมตร ❌</span>';
+        var warnEl   = document.getElementById('g-accuracy-warn');
+        var warnText = document.getElementById('g-accuracy-warn-text');
+        warnText.textContent =
+          'ความแม่นยำต่ำเกินไป (±' + acc + ' ม.) ระบบต้องการ ±' + gpsMaxAccuracy + ' ม. หรือน้อยกว่า
+' +
+          'กรุณากดปฏิเสธ แล้วเปิดใหม่ → เลือก "ตำแหน่งที่แน่นอน"';
+        warnEl.style.display = 'flex';
+        // ยังไม่ lock ปุ่ม Next ทันที — รอให้ processGPS ตัดสินจากระยะทางเอง
+        // แต่ถ้า accuracy เกิน 2× threshold ถือว่าใช้ไม่ได้เลย
+        if (acc > gpsMaxAccuracy * 2) {
+          document.getElementById('gps-result-block').style.display = 'block';
+          document.getElementById('gps-result-block').innerHTML =
+            '<div class="alert-card danger">' +
+            '<div class="alert-icon">📡</div>' +
+            '<div class="alert-title">GPS ไม่แม่นยำพอ</div>' +
+            '<div class="alert-desc">ความแม่นยำ ±' + acc + ' เมตร<br>' +
+            'อุปกรณ์ใช้ตำแหน่งโดยประมาณ (Wi-Fi/เครือข่าย)<br><br>' +
+            '<strong>กรุณาเปิดสิทธิ์ใหม่ → เลือก "แน่นอน"</strong></div></div>';
+          document.getElementById('btn-gps-next').disabled = true;
+          return;
+        }
+      } else {
+        document.getElementById('g-accuracy').innerHTML =
+          '<span style="color:var(--green);">±' + acc + ' เมตร ✅</span>';
+        document.getElementById('g-accuracy-warn').style.display = 'none';
+      }
+
       processGPS();
     },
-    function(err){ showGPSError('รับ GPS ไม่ได้: ' + err.message); },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    function(err) {
+      var msg = err.code === 1 ? 'ไม่ได้รับอนุญาตใช้ตำแหน่ง กรุณาอนุญาตแล้วลองใหม่' :
+                err.code === 2 ? 'รับสัญญาณ GPS ไม่ได้ กรุณาเปิด GPS แล้วลองใหม่'     :
+                'หมดเวลา กรุณาลองใหม่';
+      showGPSError(msg);
+    },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
   );
 }
 
@@ -961,7 +1003,7 @@ function processGPS() {
   var distance = calcDistance(gpsData.lat, gpsData.lng, parseFloat(emp.location_lat), parseFloat(emp.location_lng));
   var radius   = parseInt(emp.radius_m) || 50;
   var isInZone = distance <= radius;
-  document.getElementById('g-accuracy').textContent = '±' + gpsData.accuracy + ' เมตร';
+  // g-accuracy แสดงผลแล้วใน startGPS พร้อม ✅/❌
   document.getElementById('g-distance').innerHTML   = '<span class="' + (isInZone ? 'zone-ok' : 'zone-fail') + '">' + distance + ' เมตร</span>';
   document.getElementById('g-coord').textContent    = gpsData.lat.toFixed(5) + ', ' + gpsData.lng.toFixed(5);
   var rb = document.getElementById('gps-result-block');
@@ -1038,17 +1080,14 @@ function startVerifyCamera() {
 
 function startAutoScan() {
   var scanCount = 0;
-  checkActionFired = false; // รีเซ็ต flag ทุกครั้งที่เริ่มสแกนใหม่
+  checkActionFired = false;
   autoScanInterval = setInterval(function() {
     var video = document.getElementById('verify-video');
-    if (!video || !verifyStream) return;
-    // ถ้า doCheckAction ถูก fire ไปแล้ว ไม่ต้องทำอะไรอีก
-    if (checkActionFired) return;
+    if (!video || !verifyStream || checkActionFired) return;
     faceapi.detectSingleFace(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
       .withFaceLandmarks().withFaceDescriptor()
       .then(function(det) {
-        // ตรวจสอบ flag อีกครั้งก่อน process (Promise อาจ resolve หลัง flag ถูก set)
-        if (checkActionFired) return;
+        if (checkActionFired) return; // ── ป้องกัน Promise ค้างที่ resolve ช้า ──
         if (!det) {
           document.getElementById('verify-face-frame').className    = 'face-frame scanning';
           document.getElementById('face-status-text').textContent   = '👀 มองกล้องตรงๆ...';
@@ -1066,10 +1105,8 @@ function startAutoScan() {
           scanCount++;
           document.getElementById('verify-face-frame').className = 'face-frame success';
           if (scanCount >= 2) {
-            // ── FIX: ตั้ง flag ทันทีก่อน clearInterval เพื่อกัน Promise ที่ค้างอยู่ ──
-            checkActionFired = true;
-            clearInterval(autoScanInterval);
-            autoScanInterval = null;
+            checkActionFired = true; // ── set ก่อน clearInterval ──
+            clearInterval(autoScanInterval); autoScanInterval = null;
             document.getElementById('face-status-text').textContent     = '✅ ยืนยันตัวตนสำเร็จ!';
             document.getElementById('face-sub-text').textContent        = 'กำลังบันทึก...';
             document.getElementById('confidence-fill').style.background = 'var(--green)';
@@ -1086,8 +1123,7 @@ function startAutoScan() {
 }
 
 function doCheckAction() {
-  // ── Double-guard: ถ้าถูกเรียกซ้ำจาก Promise ที่ค้างอยู่ ให้หยุด ──
-  if (!checkActionFired) return; // flag ต้องถูก set ก่อนเสมอ
+  if (!checkActionFired) return;
   var isIn = currentMode === 'in';
   showLoading(isIn ? 'กำลังบันทึกเวลาเข้างาน...' : 'กำลังบันทึกเวลาออกงาน...');
   fetch(API_URL, {
@@ -1107,18 +1143,20 @@ function doCheckAction() {
       if (data.error) {
         var msg = data.error || '';
         if (isIn && msg.indexOf('เช็คอินวันนี้แล้ว') >= 0) {
-          var timeMatch = msg.match(/\d{1,2}:\d{2}/);
+          var t = msg.match(/\d{1,2}:\d{2}/);
           showStatusDialog({
             icon: '🔒', title: 'เช็คอินซ้ำ!',
-            desc: 'คุณได้เช็คอินวันนี้ไปแล้ว\nกรุณาเช็คเอ้าท์ออกงานก่อนครับ',
-            timeText: timeMatch ? '⏰ เวลาเช็คอิน: <span>' + timeMatch[0] + ' น.</span>' : null,
+            desc: 'คุณได้เช็คอินวันนี้ไปแล้ว
+กรุณาเช็คเอ้าท์ออกงานก่อนครับ',
+            timeText: t ? '⏰ เวลาเช็คอิน: <span>' + t[0] + ' น.</span>' : null,
             actionLabel: '📤 ไปเช็คเอ้าท์เลย',
             actionFn: function(){ currentMode = 'out'; loadShiftAndGo(); }
           });
         } else if (!isIn && msg.indexOf('ไม่พบการเช็คอิน') >= 0) {
           showStatusDialog({
             icon: '⚠️', title: 'ยังไม่ได้เช็คอิน!',
-            desc: 'ไม่พบการเช็คอินวันนี้\nกรุณาเช็คอินก่อนนะครับ',
+            desc: 'ไม่พบการเช็คอินวันนี้
+กรุณาเช็คอินก่อนนะครับ',
             actionLabel: '📥 ไปเช็คอินเลย',
             actionFn: function(){ currentMode = 'in'; loadShiftAndGo(); }
           });
