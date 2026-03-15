@@ -410,13 +410,14 @@ document.addEventListener('DOMContentLoaded', function() {
   // startApp ทันที ไม่รอ ไม่มีจอดำ
   startApp();
 
-  // LIFF background - ถ้าเปิดใน LINE browser
+  // LIFF init — ทำงานได้ทั้ง LINE browser และ Chrome
   if (!lineUserId) {
     try {
       liff.init({ liffId: LIFF_ID })
         .then(function() {
           if (!liff.isLoggedIn()) {
-            if (liff.isInClient && liff.isInClient()) { liff.login(); }
+            // ── FIX: login ได้ทั้ง Chrome และ LINE browser ──
+            liff.login({ redirectUri: window.location.href });
             return null;
           }
           return liff.getProfile();
@@ -429,8 +430,11 @@ document.addEventListener('DOMContentLoaded', function() {
           showLineProfile();
           if (typeof checkAutoLogin === 'function') checkAutoLogin();
         })
-        .catch(function() {});
-    } catch(e) {}
+        .catch(function() {
+          // LIFF ใช้ไม่ได้ (เปิดนอก LINE และไม่มี session) → แสดง guest UI
+          showGuestProfile();
+        });
+    } catch(e) { showGuestProfile(); }
   }
 })
 function startApp() {
