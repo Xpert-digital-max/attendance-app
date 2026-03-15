@@ -370,17 +370,18 @@ document.addEventListener('DOMContentLoaded', function() {
   lineUserName = params.get('name') || '';
   lineUserPic  = params.get('pic')  || '';
 
-  // ✅ เริ่มแอปทันทีเสมอ — ไม่มีจอดำ
   if (lineUserId) { showLineProfile(); }
+
+  // startApp ทันที ไม่รอ ไม่มีจอดำ
   startApp();
 
-  // LIFF ทำงานเบื้องหลัง (ถ้าเปิดใน LINE browser และยังไม่มี lineUserId)
+  // LIFF background - ถ้าเปิดใน LINE browser
   if (!lineUserId) {
     try {
       liff.init({ liffId: LIFF_ID })
         .then(function() {
           if (!liff.isLoggedIn()) {
-            if (liff.isInClient()) { liff.login(); }
+            if (liff.isInClient && liff.isInClient()) { liff.login(); }
             return null;
           }
           return liff.getProfile();
@@ -391,13 +392,12 @@ document.addEventListener('DOMContentLoaded', function() {
           lineUserName = p.displayName || '';
           lineUserPic  = p.pictureUrl  || '';
           showLineProfile();
-          checkAutoLogin();
+          if (typeof checkAutoLogin === 'function') checkAutoLogin();
         })
         .catch(function() {});
     } catch(e) {}
   }
-});
-
+})
 function startApp() {
   startClock();
   bindEvents();
