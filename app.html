@@ -118,7 +118,7 @@ select.form-input option{background:var(--card2);}
 </head>
 <body>
 
-<div class="liff-init" id="liff-init">
+<div class="liff-init" id="liff-init" style="display:none;">
   <div style="font-size:52px;">&#x1F3E2;</div>
   <div class="liff-spinner"></div>
   <div style="font-size:14px;color:var(--text2);" id="liff-init-text">กำลังเชื่อมต่อ...</div>
@@ -370,57 +370,31 @@ document.addEventListener('DOMContentLoaded', function() {
   lineUserName = params.get('name') || '';
   lineUserPic  = params.get('pic')  || '';
 
-  if (lineUserId) {
-    document.getElementById('liff-init').style.display = 'none';
-    showLineProfile();
-    startApp();
-    return;
-  }
+  // ✅ เริ่มแอปทันทีเสมอ — ไม่มีจอดำ
+  if (lineUserId) { showLineProfile(); }
+  startApp();
 
-  var liffDone = false;
-
-  var liffTimeout = setTimeout(function() {
-    if (!liffDone) {
-      liffDone = true;
-      document.getElementById('liff-init').style.display = 'none';
-      startApp();
-    }
-  }, 5000);
-
-  try {
-    liff.init({ liffId: LIFF_ID })
-      .then(function() {
-        if (liffDone) return;
-        if (!liff.isLoggedIn()) {
-          liff.login();
-          return Promise.reject('login');
-        }
-        return liff.getProfile();
-      })
-      .then(function(p) {
-        if (liffDone) return;
-        liffDone = true;
-        clearTimeout(liffTimeout);
-        lineUserId   = p.userId      || '';
-        lineUserName = p.displayName || '';
-        lineUserPic  = p.pictureUrl  || '';
-        document.getElementById('liff-init').style.display = 'none';
-        showLineProfile();
-        startApp();
-      })
-      .catch(function(e) {
-        if (liffDone) return;
-        if (e === 'login') return;
-        liffDone = true;
-        clearTimeout(liffTimeout);
-        document.getElementById('liff-init').style.display = 'none';
-        startApp();
-      });
-  } catch(e) {
-    liffDone = true;
-    clearTimeout(liffTimeout);
-    document.getElementById('liff-init').style.display = 'none';
-    startApp();
+  // LIFF ทำงานเบื้องหลัง (ถ้าเปิดใน LINE browser และยังไม่มี lineUserId)
+  if (!lineUserId) {
+    try {
+      liff.init({ liffId: LIFF_ID })
+        .then(function() {
+          if (!liff.isLoggedIn()) {
+            if (liff.isInClient()) { liff.login(); }
+            return null;
+          }
+          return liff.getProfile();
+        })
+        .then(function(p) {
+          if (!p) return;
+          lineUserId   = p.userId      || '';
+          lineUserName = p.displayName || '';
+          lineUserPic  = p.pictureUrl  || '';
+          showLineProfile();
+          checkAutoLogin();
+        })
+        .catch(function() {});
+    } catch(e) {}
   }
 });
 
