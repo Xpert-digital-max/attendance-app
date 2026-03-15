@@ -467,7 +467,17 @@ function checkAutoLogin() {
     .then(function(emp) {
       if (emp && emp.emp_id) {
         currentEmp = emp;
-        document.getElementById('profile-sub').textContent = 'ยินดีต้อนรับ ' + emp.name + ' ✅';
+        // แสดง profile card พร้อมชื่อพนักงาน
+        var picEl = document.getElementById('profile-pic');
+        if (lineUserPic) {
+          picEl.src = lineUserPic;
+          picEl.style.display = '';
+        } else {
+          picEl.style.display = 'none';
+        }
+        document.getElementById('profile-name').textContent = lineUserName || emp.name;
+        document.getElementById('profile-sub').textContent  = 'ยินดีต้อนรับ ' + emp.name + ' ✅';
+        document.getElementById('profile-card').style.display = 'flex';
       }
     })
     .catch(function(){});
